@@ -9,14 +9,14 @@
  * that starts the plugin.
  *
  * @link              https://seofy.dk
- * @since             1.0.9
+ * @since             1.0.10
  * @package           Seofy_Kwl_Mainsites
  *
  * @wordpress-plugin
  * Plugin Name:       Seofy KWL Mainsites
  * Plugin URI:        https://seofy.dk
  * Description:       The "Seofy Keyword Linking Mainsites" plugin is an essential tool for enhancing your WordPress website's SEO by automatically linking keywords to relevant pages within your content. It simplifies the process of adding internal links to boost your site's SEO performance, increase user engagement, and improve the overall user experience.
- * Version:           1.0.9
+ * Version:           1.0.10
  * Author:            Jonard Aragon
  * Author URI:        https://seofy.dk/
  * License:           GPL-2.0+
@@ -32,10 +32,10 @@ if ( ! defined( 'WPINC' ) ) {
 
 /**
  * Currently plugin version.
- * Start at version 1.0.9 and use SemVer - https://semver.org
+ * Start at version 1.0.10 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'SEOFY_KWL_MAINSITES_VERSION', '1.0.9' );
+define( 'SEOFY_KWL_MAINSITES_VERSION', '1.0.10' );
 
 /**
  * The code that runs during plugin activation.
@@ -71,7 +71,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-seofy-kwl-mainsites.php';
  * then kicking off the plugin from this point in the file does
  * not affect the page life cycle.
  *
- * @since    1.0.9
+ * @since    1.0.10
  */
 function run_seofy_kwl_mainsites() {
 
@@ -88,7 +88,6 @@ function github_plugin_updater_kwl_main_init() {
         define( 'SKWLM_PLUGIN_SLUG',  'seofy-kwl-mainsites' );
         define( 'SKWLM_PROPER_FOLDER_NAME',  'seofy-kwl-mainsites' );
         define( 'SKWLM_GITHUB_URL',  'https://api.github.com/repos/devseofy/seofy-kwl-mainsites/releases');
-        define( 'SKWLM_GITHUB_TOKEN',  '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');
         new WP_GitHub_Updater_For_SeofyPlugin_KWLM();
 
     }
