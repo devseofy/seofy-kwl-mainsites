@@ -1,105 +1,80 @@
 <?php
 class WP_GitHub_Updater_For_SeofyPlugin_KWLM {
-    public function __construct()
+public function __construct()
     {
-        add_action( 'http_request_args', array($this,'http_request_args_filter'), 10, 2);
         add_filter( 'pre_set_site_transient_update_plugins', array($this, 'check_for_plugin_update'));
         add_filter( 'upgrader_post_install', array( $this, 'upgrader_post_install' ), 10, 3 );
-        //add_filter( 'upgrader_source_selection', array($this, 'upgrader_webix_source_selection_filter'), 1, 3);
 
     }
-  /**
+  	/**
      * Update plugin from github
      */
-    function check_for_plugin_update($transient) {
-        
-        $plugin_slug = plugin_basename(SKWLM_PLUGIN_DIRECTORY);
-       
-        $plugin_data = get_plugin_data(SKWLM_PLUGIN_DIRECTORY);
-      
-        $github_url = SKWLM_GITHUB_URL;
+	function check_for_plugin_update($transient) {
+		$plugin_slug = plugin_basename(SKWLM_PLUGIN_DIRECTORY);
 
-        
-        $request = wp_remote_get($github_url, array(
-            'headers' => array(
-                'Authorization' => 'token ' . SKWLM_GITHUB_TOKEN,
-            ),
-        ));
-        if (is_wp_error($request)) {
-            return $transient;
-        }
+		$plugin_main_file = WP_PLUGIN_DIR . '/' . SKWLM_PROPER_FOLDER_NAME . '/' . basename(SKWLM_PLUGIN_DIRECTORY);
+		if (!file_exists($plugin_main_file)) {
+			return $transient;
+		}
 
-        $request = json_decode(wp_remote_retrieve_body($request));
-        if (empty($request)) {
-            return $transient;
-        }
-        if (isset($request[0]) && version_compare($plugin_data['Version'], $request[0]->tag_name, '<')) {
-            if (!isset($transient) || !is_object($transient)) {
-                $transient = (object) array();
-            }
-            if (!isset($transient->response) || !is_array($transient->response)) {
-                $transient->response = array();
-            }
-            $headers = array(
-                'Authorization' => 'token ' . SKWLM_GITHUB_TOKEN,
-            );
+		$plugin_data = get_plugin_data($plugin_main_file);
+		$github_url  = SKWLM_GITHUB_URL;
 
-            $transient->response[$plugin_slug] = (object) array(
-                'slug' => SKWLM_PLUGIN_DIRECTORY,
-                'plugin' => SKWLM_PLUGIN_SLUG,
-                'new_version' => $request[0]->tag_name,
-                'url' => $request[0]->html_url,
-                'package' => $request[0]->zipball_url,
-            );
-          
-            $request = wp_remote_get($request[0]->zipball_url, array('headers' => $headers));
-    
-            
-        }
+		$response = wp_remote_get($github_url);
+		if (is_wp_error($response)) {
+			return $transient;
+		}
 
-        // Save the update transient for 24 hours
-        set_transient('my_plugin_update_transient', time(), 24 * 60 * 60);
-        return $transient;
-    }
+		$code = wp_remote_retrieve_response_code($response);
+		if ($code !== 200) {
+			return $transient; // GitHub returned 404 or another error
+		}
 
-    function http_request_args_filter($args, $url) {
-        if (strpos($url, 'https://api.github.com/') !== false) {
-            $args['headers']['Authorization'] = 'token ' . SKWLM_GITHUB_TOKEN;
-        }
+		$body = wp_remote_retrieve_body($response);
+		$releases = json_decode($body);
 
-        return $args;
-    }
+		if (!is_array($releases) || empty($releases[0]) || !isset($releases[0]->tag_name)) {
+			return $transient;
+		}
+
+		// Only compare version if structure is valid
+		if (version_compare($plugin_data['Version'], $releases[0]->tag_name, '<')) {
+			if (!isset($transient) || !is_object($transient)) {
+				$transient = (object) array();
+			}
+			if (!isset($transient->response) || !is_array($transient->response)) {
+				$transient->response = array();
+			}
+
+			$transient->response[$plugin_slug] = (object) array(
+				'slug' => SKWLM_PLUGIN_DIRECTORY,
+				'plugin' => SKWLM_PLUGIN_SLUG,
+				'new_version' => $releases[0]->tag_name,
+				'url' => $releases[0]->html_url,
+				'package' => $releases[0]->zipball_url
+			);
+		}
+
+		set_transient('my_plugin_update_transient', time(), 24 * 60 * 60);
+		return $transient;
+	}
+
 
     public function upgrader_post_install( $true, $hook_extra, $result ) {
-
         global $wp_filesystem;
-        
-        // Move & Activate
-        $proper_destination = WP_PLUGIN_DIR.'/'.SKWLM_PROPER_FOLDER_NAME;
+
+        $proper_destination = WP_PLUGIN_DIR . '/' . SKWLM_PROPER_FOLDER_NAME;
         $wp_filesystem->move( $result['destination'], $proper_destination );
         $result['destination'] = $proper_destination;
-        $activate = activate_plugin( WP_PLUGIN_DIR.'/'.SKWLM_PLUGIN_SLUG );
-        
-        // Output the update message
-        $fail  = __( 'The plugin has been updated, but could not be reactivated. Please reactivate it manually.', 'github_plugin_updater' );
+        $activate = activate_plugin( WP_PLUGIN_DIR . '/' . SKWLM_PLUGIN_SLUG );
+
+        $fail = __( 'The plugin has been updated, but could not be reactivated. Please reactivate it manually.', 'github_plugin_updater' );
         $success = __( 'Plugin reactivated successfully.', 'github_plugin_updater' );
         echo is_wp_error( $activate ) ? $fail : $success;
+
         return $result;
-        
-        }
-
-    function upgrader_webix_source_selection_filter($source, $remote_source, $upgrader) {
-        // Check if the plugin being installed is ours
-        if (!$this->is_plugin_update($upgrader->skin->plugin_info)) {
-            return $source;
-        }
-        if (!is_object($GLOBALS['wp_filesystem'])) {
-            return $source;
-        }
-
-        // Do not modify the directory name
-        return $source;
     }
+
 
     function is_plugin_update($plugin_info) {
         if (!isset($plugin_info['destination']))
@@ -110,6 +85,7 @@ class WP_GitHub_Updater_For_SeofyPlugin_KWLM {
         // Check if it matches the directory of our own plugin
         return $directory === dirname(SKWLM_PLUGIN_DIRECTORY);
     }
+
 
    
 }
