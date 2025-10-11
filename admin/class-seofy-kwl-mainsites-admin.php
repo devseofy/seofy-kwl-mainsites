@@ -165,7 +165,7 @@ class Seofy_Kwl_Mainsites_Admin {
 	}
 
 
-	public function linkKeywords($content, $keywords) {
+	/*public function linkKeywords($content, $keywords) {
 		$linkedKeywords = []; // Keep track of linked keywords
 		$existingLinks = [];
 		$placeholders = [];
@@ -222,6 +222,106 @@ class Seofy_Kwl_Mainsites_Admin {
 		$content = implode('', $parts);
 	
 		return $content;
+	}*/
+
+	public function linkKeywords($content, $keywords) {
+		if (empty($content) || empty($keywords)) {
+			return $content;
+		}
+
+		// 1) Collect existing anchor texts (case-insensitive) to avoid re-linking
+		$existingLinks = [];
+		if (preg_match_all('/<a\b[^>]*>(.*?)<\/a>/isu', $content, $m)) {
+			foreach ($m[1] as $txt) {
+				$existingLinks[] = mb_strtolower(trim(strip_tags($txt)));
+			}
+		}
+
+		// 2) Split content by shortcodes so we don't touch them
+		$shortcodePattern = '/(\[[^\]]+\])/u';
+		$parts = preg_split($shortcodePattern, $content, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+
+		// Track which keywords we already linked (once per post)
+		$linkedKeywords = [];
+
+		// Pre-normalize keywords (trim, dedupe empties)
+		$normalized = [];
+		foreach ($keywords as $kw => $url) {
+			$kw = trim($kw);
+			if ($kw === '') continue;
+			$normalized[$kw] = $url;
+		}
+
+		// Helper: build a safe regex for a keyword (whole word/phrase, unicode)
+		$makePattern = function($kw) {
+			$escaped = preg_quote($kw, '/');
+			// \b is imperfect for unicode phrases; this is a reasonable compromise:
+			return '/(?<![^\W_])(' . $escaped . ')(?![^\W_])/iu';
+		};
+
+		// 3) Process only parts that are NOT shortcodes
+		foreach ($parts as &$part) {
+			if (preg_match($shortcodePattern, $part)) {
+				continue; // leave shortcodes untouched
+			}
+
+			// 3a) Temporarily replace regions we never want to touch with placeholders
+			$placeholders = [];
+			$phIndex = 0;
+
+			// Exclude block anchors/headings/iframes and handle self-closing <img/>
+			$excludePatterns = [
+				'/<a\b[^>]*>.*?<\/a>/isu',
+				'/<h[1-6]\b[^>]*>.*?<\/h[1-6]>/isu',
+				'/<iframe\b[^>]*>.*?<\/iframe>/isu',
+				'/<img\b[^>]*\/?>/isu', // self-closing or legacy
+				'/<script\b[^>]*>.*?<\/script>/isu',
+				'/<style\b[^>]*>.*?<\/style>/isu',
+				'/<(code|pre)\b[^>]*>.*?<\/\1>/isu',
+			];
+
+			foreach ($excludePatterns as $xp) {
+				$part = preg_replace_callback($xp, function($m) use (&$placeholders, &$phIndex) {
+					$ph = '{{ph-' . ($phIndex++) . '}}';
+					$placeholders[$ph] = $m[0];
+					return $ph;
+				}, $part);
+			}
+
+			// 3b) For each keyword (until it’s linked once globally), replace FIRST occurrence via callback
+			foreach ($normalized as $kw => $url) {
+				if (isset($linkedKeywords[mb_strtolower($kw)])) {
+					continue;
+				}
+
+				// If an existing link already uses this exact text, skip
+				if (in_array(mb_strtolower($kw), $existingLinks, true)) {
+					$linkedKeywords[mb_strtolower($kw)] = true;
+					continue;
+				}
+
+				$pattern = $makePattern($kw);
+
+				$replaced = false;
+				$part = preg_replace_callback($pattern, function($m) use ($url, $kw, &$replaced, &$linkedKeywords) {
+					if ($replaced) return $m[0]; // only first per part
+					// Link it
+					$replaced = true;
+					$linkedKeywords[mb_strtolower($kw)] = true;
+					return '<a href="' . esc_url($url) . '">' . $m[1] . '</a>';
+				}, $part, 1); // limit=1 for speed
+
+				// Optional: also stop if we reached some global cap of total links
+			}
+
+			// 3c) Restore placeholders
+			if (!empty($placeholders)) {
+				$part = strtr($part, $placeholders);
+			}
+		}
+
+		return implode('', $parts);
 	}
+
 
 }
