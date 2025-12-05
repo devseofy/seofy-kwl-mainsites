@@ -258,7 +258,8 @@ class Seofy_Kwl_Mainsites_Admin {
 			// \b is imperfect for unicode phrases; this is a reasonable compromise:
 			return '/(?<![^\W_])(' . $escaped . ')(?![^\W_])/iu';
 		};
-
+		
+		$globalPH = 0;
 		// 3) Process only parts that are NOT shortcodes
 		foreach ($parts as &$part) {
 			if (preg_match($shortcodePattern, $part)) {
@@ -267,7 +268,7 @@ class Seofy_Kwl_Mainsites_Admin {
 
 			// 3a) Temporarily replace regions we never want to touch with placeholders
 			$placeholders = [];
-			$phIndex = 0;
+			//$phIndex = 0;
 
 			// Exclude block anchors/headings/iframes and handle self-closing <img/>
 			$excludePatterns = [
@@ -282,7 +283,7 @@ class Seofy_Kwl_Mainsites_Admin {
 
 			foreach ($excludePatterns as $xp) {
 				$part = preg_replace_callback($xp, function($m) use (&$placeholders, &$phIndex) {
-					$ph = '{{ph-' . ($phIndex++) . '}}';
+					$ph = '{{ph-' . ($globalPH++) . '}}';
 					$placeholders[$ph] = $m[0];
 					return $ph;
 				}, $part);
@@ -316,12 +317,24 @@ class Seofy_Kwl_Mainsites_Admin {
 
 			// 3c) Restore placeholders
 			if (!empty($placeholders)) {
-				$part = strtr($part, $placeholders);
+				$part = $this->restore_placeholders($part, $placeholders);
 			}
 		}
 
 		return implode('', $parts);
 	}
+
+	private function restore_placeholders($content, $placeholders) {
+		$maxLoops = 10; // protection against infinite loops
+		while ($maxLoops > 0 && preg_match('/{{ph-\d+}}/', $content)) {
+			foreach ($placeholders as $ph => $real) {
+				$content = str_replace($ph, $real, $content);
+			}
+			$maxLoops--;
+		}
+		return $content;
+	}
+
 
 
 }
